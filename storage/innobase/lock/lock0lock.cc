@@ -1557,6 +1557,58 @@ void lock_sys_t::wait_resume(THD *thd, my_hrtime_t start, my_hrtime_t now)
   }
 }
 
+#ifdef HAVE_REPLICATION
+ATTRIBUTE_NOINLINE MY_ATTRIBUTE((nonnull))
+/** Report lock waits to parallel replication.
+@param trx       transaction that may be waiting for a lock
+@param wait_lock lock that is being waited for */
+static void lock_wait_rpl_report(trx_t *trx)
+{
+  mysql_mutex_assert_owner(&lock_sys.wait_mutex);
+  ut_ad(trx->state == TRX_STATE_ACTIVE);
+  THD *const thd= trx->mysql_thd;
+  ut_ad(thd);
+  const lock_t *wait_lock= trx->lock.wait_lock;
+  if (!wait_lock)
+    return;
+  ut_ad(wait_lock->is_waiting());
+  ut_ad(!(wait_lock->type_mode & LOCK_AUTO_INC));
+  mysql_mutex_unlock(&lock_sys.wait_mutex);
+  LockMutexGuard g;
+  mysql_mutex_lock(&lock_sys.wait_mutex);
+  wait_lock= trx->lock.wait_lock;
+  if (!wait_lock)
+    return;
+  ut_ad(!(wait_lock->type_mode & LOCK_AUTO_INC));
+
+  if (wait_lock->is_table())
+  {
+    if (lock_t *lock=
+        UT_LIST_GET_FIRST(wait_lock->un_member.tab_lock.table->locks))
+    {
+      do
+        if (!(lock->type_mode & LOCK_AUTO_INC) &&
+            lock->trx->mysql_thd != thd)
+          thd_rpl_deadlock_check(thd, lock->trx->mysql_thd);
+      while ((lock= UT_LIST_GET_NEXT(un_member.tab_lock.locks, lock)));
+    }
+  }
+  else if (lock_t *lock=
+           lock_sys.get_first(wait_lock->type_mode & LOCK_PREDICATE
+                              ? lock_sys.prdt_hash : lock_sys.rec_hash,
+                              wait_lock->un_member.rec_lock.page_id))
+  {
+    const ulint heap_no= lock_rec_find_set_bit(wait_lock);
+    if (!lock_rec_get_nth_bit(lock, heap_no))
+      lock= lock_rec_get_next(heap_no, lock);
+    do
+      if (lock->trx->mysql_thd != thd)
+        thd_rpl_deadlock_check(thd, lock->trx->mysql_thd);
+    while ((lock= lock_rec_get_next(heap_no, lock)));
+  }
+}
+#endif /* HAVE_REPLICATION */
+
 /** Wait for a lock to be released.
 @retval DB_DEADLOCK if this transaction was chosen as the deadlock victim
 @retval DB_INTERRUPTED if the execution was interrupted by the user
@@ -1613,13 +1665,20 @@ dberr_t lock_wait(que_thr_t *thr)
   can only be initiated by the current thread which owns the transaction. */
   if (const lock_t *wait_lock= trx->lock.wait_lock)
   {
-    static_assert(THD_WAIT_TABLE_LOCK != 0, "compatibility");
-    static_assert(THD_WAIT_ROW_LOCK != 0, "compatibility");
-    wait_for= wait_lock->is_table() ? THD_WAIT_TABLE_LOCK : THD_WAIT_ROW_LOCK;
+    const auto type_mode= wait_lock->type_mode;
     mysql_mutex_unlock(&lock_sys.wait_mutex);
 
     if (had_dict_lock) /* Release foreign key check latch */
       row_mysql_unfreeze_data_dictionary(trx);
+
+    static_assert(THD_WAIT_TABLE_LOCK != 0, "compatibility");
+    static_assert(THD_WAIT_ROW_LOCK != 0, "compatibility");
+    wait_for= type_mode & LOCK_TABLE ? THD_WAIT_TABLE_LOCK : THD_WAIT_ROW_LOCK;
+
+#ifdef HAVE_REPLICATION
+    const bool rpl= !(type_mode & LOCK_AUTO_INC) && trx->mysql_thd &&
+      thd_need_wait_reports(trx->mysql_thd);
+#endif
 
     timespec abstime;
     set_timespec_time_nsec(abstime, suspend_time.val * 1000);
@@ -1632,7 +1691,12 @@ dberr_t lock_wait(que_thr_t *thr)
       goto end_wait;
     }
 
-    while (trx->lock.wait_lock)
+#ifdef HAVE_REPLICATION
+    if (rpl)
+      lock_wait_rpl_report(trx);
+#endif
+
+    while (const lock_t *lock= trx->lock.wait_lock)
     {
       if (no_timeout)
         mysql_cond_wait(&trx->lock.cond, &lock_sys.wait_mutex);
@@ -1704,6 +1768,7 @@ end_wait:
 static void lock_wait_end(trx_t *trx)
 {
   mysql_mutex_assert_owner(&lock_sys.wait_mutex);
+  ut_ad(trx->state == TRX_STATE_ACTIVE);
 
   que_thr_t *thr= trx->lock.wait_thr;
   ut_ad(thr);
@@ -5876,10 +5941,13 @@ namespace Deadlock
           {
             ut_ad(!lock->is_waiting());
             print("*** CONFLICTING WITH:\n");
-            print(*lock);
+            do
+              print(*lock);
+            while ((lock= UT_LIST_GET_NEXT(un_member.tab_lock.locks, lock)) &&
+                   !lock->is_waiting());
           }
           else
-            ut_ad("conflicting table lock not found" == 0);
+            ut_ad("no conflicting table lock found" == 0);
 
         }
         else if (const lock_t *lock=
@@ -5892,10 +5960,13 @@ namespace Deadlock
             lock= lock_rec_get_next_const(heap_no, lock);
           ut_ad(!lock->is_waiting());
           print("*** CONFLICTING WITH:\n");
-          print(*lock);
+          do
+            print(*lock);
+          while ((lock= lock_rec_get_next_const(heap_no, lock)) &&
+                 !lock->is_waiting());
         }
         else
-          ut_ad("conflicting record lock not found" == 0);
+          ut_ad("no conflicting record lock found" == 0);
 
         if (next == cycle)
           break;
@@ -5931,20 +6002,10 @@ static bool Deadlock::check_and_resolve(trx_t *trx)
   ut_ad(trx->state == TRX_STATE_ACTIVE);
   ut_ad(!srv_read_only_mode);
 
-#ifdef HAVE_REPLICATION
-  const bool rpl= trx->mysql_thd && thd_need_wait_reports(trx->mysql_thd);
-#endif
-
   mysql_mutex_lock(&lock_sys.wait_mutex);
 
   if (!innobase_deadlock_detect)
     return false;
-
-#ifdef HAVE_REPLICATION
-  if (rpl && trx->lock.wait_trx && trx->lock.wait_trx->mysql_thd &&
-      !((*trx->lock.wait_lock).type_mode & LOCK_AUTO_INC))
-    thd_rpl_deadlock_check(trx->mysql_thd, trx->lock.wait_trx->mysql_thd);
-#endif
 
   auto cycle= find_cycle(trx);
 
