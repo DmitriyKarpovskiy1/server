@@ -929,9 +929,9 @@ sub run_test_server ($$$) {
 
                 rename $log_file_name, $log_file_name.".failed";
               }
-	      delete($result->{result});
 	      $result->{retries}= $retries+1;
 	      $result->write_test($sock, 'TESTCASE');
+	      push(@$completed, $result);
 	      next;
 	    }
 	  }
