@@ -502,7 +502,7 @@ sub mtr_report_stats ($$$$) {
       # if a test case has to be retried it should have the result MTR_RES_FAILED in jUnit XML
       if ($test->{'retries'} > 0) {
         $test_result = "MTR_RES_FAILED";
-        if ($test->{'result'} == "MTR_RES_PASS"){
+        if ($test->{'result'} eq "MTR_RES_PASSED"){
           $test_result = "MTR_RES_RETRY_PASS";
         }
       } else {
