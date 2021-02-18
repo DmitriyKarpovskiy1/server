@@ -508,6 +508,10 @@ sub mtr_report_stats ($$$$) {
       } else {
         $test_result = $test->{'result'};
       }
+      if ($test_result eq "MTR_RES_PASSED" && defined($test->{'warnings'})){
+        $test_result = "MTR_RES_PASS_WARINIGS";
+      }
+
       my $combinations;
       if (defined($test->{combinations})){
         $combinations = join ',', @{$test->{combinations}};
@@ -540,6 +544,8 @@ sub mtr_report_stats ($$$$) {
         $xml_report .= qq(>\n\t\t\t<disabled message="$comment" type="MTR_RES_SKIPPED"/>\n\t\t</testcase>\n);
       } elsif ($test->{'result'} eq "MTR_RES_SKIPPED") {
         $xml_report .= qq(>\n\t\t\t<skipped message="$comment" type="MTR_RES_SKIPPED"/>\n\t\t</testcase>\n);
+      } elsif ($test_result eq "MTR_RES_PASS_WARINIGS") {
+        $xml_report .= qq(>\n\t\t\t<warning message="" type="MTR_RES_PASS_WARINIGS">\n$test->{'warnings'}\n\t\t\t</warning>\n\t\t</testcase>\n);
       } else {
         $xml_report .= " />\n";
       }
