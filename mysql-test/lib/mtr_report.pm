@@ -531,7 +531,7 @@ sub mtr_report_stats ($$$$) {
       $comment =~ s/>/&gt;/g;
 
       # if a test case has to be retried it should have the result MTR_RES_FAILED in jUnit XML
-      if ($test->{'result'} eq "MTR_RES_FAILED" || $test->{'retries'} > 0) {
+      if ($test->{'result'} eq "MTR_RES_FAILED") {
         my $logcontents = $test->{'logfile-failed'} || $test->{'logfile'};
         $logcontents= $logcontents.$test->{'warnings'}."\n".$test->{'comment'};
         # remove any double ] that would end the cdata
