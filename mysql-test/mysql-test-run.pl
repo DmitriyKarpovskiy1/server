@@ -931,7 +931,7 @@ sub run_test_server ($$$) {
               }
 	      $result->{retries}= $retries+1;
 	      $result->write_test($sock, 'TESTCASE');
-             push(@$completed, $result);
+              push(@$completed, $result);
 	      next;
 	    }
 	  }
