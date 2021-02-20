@@ -499,9 +499,8 @@ sub mtr_report_stats ($$$$) {
 
       my $test_result;
 
-      # if a test case has to be retried it should have the result MTR_RES_FAILED in jUnit XML
-      if ($test->{'retries'} > 0) {
-        $test_result = "MTR_RES_FAILED";
+      if (defined($test->{'restarted'})) {
+        $test_result = "MTR_RES_RETRY_FAIL";
         if ($test->{'result'} eq "MTR_RES_PASSED"){
           $test_result = "MTR_RES_RETRY_PASS";
         }
@@ -509,7 +508,7 @@ sub mtr_report_stats ($$$$) {
         $test_result = $test->{'result'};
       }
       if ($test_result eq "MTR_RES_PASSED" && defined($test->{'warnings'})){
-        $test_result = "MTR_RES_PASS_WARINIGS";
+        $test_result = "MTR_RES_PASS_WARNINGS";
       }
 
       my $combinations;
@@ -530,7 +529,6 @@ sub mtr_report_stats ($$$$) {
       $comment =~ s/</&lt;/g;
       $comment =~ s/>/&gt;/g;
 
-      # if a test case has to be retried it should have the result MTR_RES_FAILED in jUnit XML
       if ($test->{'result'} eq "MTR_RES_FAILED") {
         my $logcontents = $test->{'logfile-failed'} || $test->{'logfile'};
         $logcontents= $logcontents.$test->{'warnings'}."\n".$test->{'comment'};
@@ -539,13 +537,13 @@ sub mtr_report_stats ($$$$) {
         # replace wide characters that aren't allowed in XML 1.0
         $logcontents =~ s/[\x00-\x08\x0B\x0C\x0E-\x1F]/\x{fffd}/g;
 
-        $xml_report .= qq(>\n\t\t\t<failure message="" type="MTR_RES_FAILED">\n<![CDATA[$logcontents]]>\n\t\t\t</failure>\n\t\t</testcase>\n);
+        $xml_report .= qq(>\n\t\t\t<failure message="" type="$test_result">\n<![CDATA[$logcontents]]>\n\t\t\t</failure>\n\t\t</testcase>\n);
       } elsif ($test->{'result'} eq "MTR_RES_SKIPPED" && $test->{'disable'}) {
         $xml_report .= qq(>\n\t\t\t<disabled message="$comment" type="MTR_RES_SKIPPED"/>\n\t\t</testcase>\n);
       } elsif ($test->{'result'} eq "MTR_RES_SKIPPED") {
         $xml_report .= qq(>\n\t\t\t<skipped message="$comment" type="MTR_RES_SKIPPED"/>\n\t\t</testcase>\n);
-      } elsif ($test_result eq "MTR_RES_PASS_WARINIGS") {
-        $xml_report .= qq(>\n\t\t\t<warning message="" type="MTR_RES_PASS_WARINIGS">\n$test->{'warnings'}\n\t\t\t</warning>\n\t\t</testcase>\n);
+      } elsif ($test_result eq "MTR_RES_PASS_WARNINGS") {
+        $xml_report .= qq(>\n\t\t\t<warning message="" type="MTR_RES_PASS_WARNINGS">\n$test->{'warnings'}\n\t\t\t</warning>\n\t\t</testcase>\n);
       } else {
         $xml_report .= " />\n";
       }
