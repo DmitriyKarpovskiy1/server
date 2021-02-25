@@ -3,7 +3,7 @@ Code status:113
 2
 * [![Travis CI status](https://secure.travis-ci.org/MariaDB/server.png?branch=10.5)](https://travis-ci.org/MariaDB/server) travis-ci.org (10.5 branch)
 * [![Appveyor CI status](https://ci.appveyor.com/api/projects/status/4u6pexmtpuf8jq66?svg=true)](https://ci.appveyor.com/project/rasmushoj/server) ci.appveyor.com
-233
+2333
 ## MariaDB: The open source relational database 3
 3
 MariaDB was designed as a drop-in replacement of MySQL(R) with more
