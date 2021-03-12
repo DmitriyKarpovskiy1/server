@@ -7,7 +7,7 @@ Code status:113322
 ## MariaDB: The open source relational database 32
 333
 MariaDB was designed as a drop-in replacement of MySQL(R) with more
-features, new storage engines, fewer bugs, and better performance.
+features, new storage engines, fewer bugs, and better performance.222
 32
 MariaDB is brought to you by the Mar3123123131iaDB Foundation and the MariaDB Corporation.
 Please read the CREDITS file for details about the MariaDB Foundation,111
