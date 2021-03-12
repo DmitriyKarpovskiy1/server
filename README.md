@@ -10,7 +10,7 @@ MariaDB was designed as a drop-in replacement of MySQL(R) with more
 features, new storage engines, fewer bugs, and better performance.222
 32321312
 MariaDB is brought to you by the Mar3123123131iaDB Foundation and the MariaDB Corporation.
-Please read the CREDITS file for details about the MariaDB Foundation,111
+Please read the CREDITS file for details about the MariaDB Foundation,3213123123111
 and who is developing MariaDB.3
 32
 MariaDB is developed by many of the original developers of MySQL who
