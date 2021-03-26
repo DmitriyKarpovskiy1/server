@@ -501,10 +501,10 @@ sub mtr_report_stats ($$$$) {
 
       if ($test->{'retries'} > 0) {
         $test_result = "MTR_RES_FAILED";
-        if ($test->{'failures'} > 1){
+        if ($test->{'result'} eq "MTR_RES_FAILED") {
           $test_result = "MTR_RES_RETRY_FAILED";
         }
-        if ($test->{'result'} eq "MTR_RES_PASSED"){
+        else {
           $test_result = "MTR_RES_RETRY_PASSED";
         }
       } else {
